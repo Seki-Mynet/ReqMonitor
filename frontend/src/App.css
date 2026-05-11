@@ -1,184 +1,286 @@
-.counter {
-  font-size: 16px;
-  padding: 5px 10px;
-  border-radius: 5px;
-  color: var(--accent);
-  background: var(--accent-bg);
-  border: 2px solid transparent;
-  transition: border-color 0.3s;
-  margin-bottom: 24px;
-
-  &:hover {
-    border-color: var(--accent-border);
-  }
-  &:focus-visible {
-    outline: 2px solid var(--accent);
-    outline-offset: 2px;
-  }
+/* ============================================================
+   1. Base Reset & Layout
+   ============================================================ */
+html, body, #root {
+  margin: 0 !important;
+  padding: 0 !important;
+  overflow: hidden; /* 全体スクロールは抑止 */
+  width: 100vw;
+  height: 100vh;
 }
 
-.hero {
-  position: relative;
-
-  .base,
-  .framework,
-  .vite {
-    inset-inline: 0;
-    margin: 0 auto;
-  }
-
-  .base {
-    width: 170px;
-    position: relative;
-    z-index: 0;
-  }
-
-  .framework,
-  .vite {
-    position: absolute;
-  }
-
-  .framework {
-    z-index: 1;
-    top: 34px;
-    height: 28px;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(44deg) rotateY(39deg)
-      scale(1.4);
-  }
-
-  .vite {
-    z-index: 0;
-    top: 107px;
-    height: 26px;
-    width: auto;
-    transform: perspective(2000px) rotateZ(300deg) rotateX(40deg) rotateY(39deg)
-      scale(0.8);
-  }
+body {
+  background-color: #f0f4f8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  color: #2c3e50;
+  line-height: 1.5;
 }
 
-#center {
+.app-container {
   display: flex;
   flex-direction: column;
-  gap: 25px;
-  place-content: center;
-  place-items: center;
-  flex-grow: 1;
-
-  @media (max-width: 1024px) {
-    padding: 32px 20px 24px;
-    gap: 18px;
-  }
+  height: 100vh;
 }
 
-#next-steps {
+/* ============================================================
+   2. Header & Live Indicator
+   ============================================================ */
+header {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: 70px;
+  background: linear-gradient(135deg, #6e8efb, #a777e3);
   display: flex;
-  border-top: 1px solid var(--border);
-  text-align: left;
-
-  & > div {
-    flex: 1 1 0;
-    padding: 32px;
-    @media (max-width: 1024px) {
-      padding: 24px 20px;
-    }
-  }
-
-  .icon {
-    margin-bottom: 16px;
-    width: 22px;
-    height: 22px;
-  }
-
-  @media (max-width: 1024px) {
-    flex-direction: column;
-    text-align: center;
-  }
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 30px;
+  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+  z-index: 1000;
+  box-sizing: border-box; 
 }
 
-#docs {
-  border-right: 1px solid var(--border);
+header h2 { color: #ffffff; margin: 0; font-size: 1.5em; font-weight: 800; }
 
-  @media (max-width: 1024px) {
-    border-right: none;
-    border-bottom: 1px solid var(--border);
-  }
-}
-
-#next-steps ul {
-  list-style: none;
-  padding: 0;
+.live-badge {
+  background: rgba(255, 255, 255, 0.15);
+  color: white;
+  padding: 5px 14px;
+  border-radius: 20px;
+  font-size: 0.8em;
+  font-weight: 700;
   display: flex;
-  gap: 8px;
-  margin: 32px 0 0;
-
-  .logo {
-    height: 18px;
-  }
-
-  a {
-    color: var(--text-h);
-    font-size: 16px;
-    border-radius: 6px;
-    background: var(--social-bg);
-    display: flex;
-    padding: 6px 12px;
-    align-items: center;
-    gap: 8px;
-    text-decoration: none;
-    transition: box-shadow 0.3s;
-
-    &:hover {
-      box-shadow: var(--shadow);
-    }
-    .button-icon {
-      height: 18px;
-      width: 18px;
-    }
-  }
-
-  @media (max-width: 1024px) {
-    margin-top: 20px;
-    flex-wrap: wrap;
-    justify-content: center;
-
-    li {
-      flex: 1 1 calc(50% - 8px);
-    }
-
-    a {
-      width: 100%;
-      justify-content: center;
-      box-sizing: border-box;
-    }
-  }
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  backdrop-filter: blur(4px);
 }
 
-#spacer {
-  height: 88px;
-  border-top: 1px solid var(--border);
-  @media (max-width: 1024px) {
-    height: 48px;
-  }
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  animation: pulse 1.5s infinite;
 }
 
-.ticks {
-  position: relative;
+.live-badge.connecting .live-dot { background-color: #f1c40f; box-shadow: 0 0 8px #f1c40f; }
+.live-badge.connected .live-dot  { background-color: #2ecc71; box-shadow: 0 0 8px #2ecc71; }
+.live-badge.disconnected .live-dot { background-color: #e74c3c; box-shadow: 0 0 8px #e74c3c; }
+
+@keyframes pulse {
+  0% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.2); }
+  100% { opacity: 1; transform: scale(1); }
+}
+
+/* ============================================================
+   3. Main Layout & Sidebar (History List)
+   ============================================================ */
+.main-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  margin-top: 70px;
+}
+
+.sidebar {
+  width: 320px;
+  background-color: #ffffff;
+  border-right: 1px solid #e2e8f0;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 15px;
+  font-size: 0.75rem;
+  font-weight: bold;
+  color: #94a3b8;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.index-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 10px;
+}
+
+/* 履歴アイテム：1行表示 */
+.index-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  padding: 8px 10px;
+  margin-bottom: 4px;
+  border-radius: 6px;
+  background: #f8fafc;
+  border-left: 4px solid var(--m-color, #cbd5e1);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  gap: 6px;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.index-item:hover {
+  background-color: #edf2f7;
+  border-left-width: 6px;
+  transform: translateX(2px);
+}
+
+.index-number {
+  font-size: 0.7rem;
+  font-weight: bold;
+  min-width: 22px;
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
+.index-method-badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  background-color: var(--m-color, #64748b);
+  color: #ffffff;
+  min-width: 38px;
+  text-align: center;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+
+.index-path {
+  flex: 1; 
+  font-size: 0.8rem;
+  font-weight: 500;
+  color: #334155;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.index-time {
+  font-size: 0.65rem;
+  color: #94a3b8;
+  font-family: monospace;
+  flex-shrink: 0;
+  margin-left: auto;
+}
+
+/* ============================================================
+   4. Content Area & Chat Balloons
+   ============================================================ */
+.content-area {
+  flex: 1;
+  overflow-y: auto;
+  background-color: #f5f7f9;
+}
+
+.balloon-container {
+  display: flex;
+  flex-direction: column;
+  padding: 40px 20px;
+  max-width: 900px;
+  margin: 0 auto;
+}
+
+.message-unit {
   width: 100%;
-
-  &::before,
-  &::after {
-    content: '';
-    position: absolute;
-    top: -4.5px;
-    border: 5px solid transparent;
-  }
-
-  &::before {
-    left: 0;
-    border-left-color: var(--border);
-  }
-  &::after {
-    right: 0;
-    border-right-color: var(--border);
-  }
+  display: flex;
+  flex-direction: column;
+  scroll-margin-top: 20px;
 }
+
+.balloon {
+  position: relative;
+  background: #ffffff;
+  border-radius: 16px;
+  padding: 16px;
+  max-width: 85%;
+  min-width: 280px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+  margin-bottom: 12px;
+}
+
+/* 左右配置とスライド効果 */
+.balloon.left {
+  align-self: flex-start;
+  margin-right: auto;
+  border-left: 6px solid var(--m-color, #64748b);
+  animation: slideInLeft 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.balloon.right { 
+  align-self: flex-end; 
+  margin-left: auto;
+  background-color: #e3f2fd; 
+  border-radius: 16px 16px 4px 16px; 
+  border-right: 6px solid var(--m-color, #64748b);
+  animation: slideInRight 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94) both;
+}
+
+.set-divider {
+  margin: 30px auto 50px auto;
+  height: 1px;
+  width: 100%;
+  background: #e2e8f0;
+}
+
+@keyframes slideInLeft { from { opacity: 0; transform: translateX(-30px); } to { opacity: 1; transform: translateX(0); } }
+@keyframes slideInRight { from { opacity: 0; transform: translateX(30px); } to { opacity: 1; transform: translateX(0); } }
+
+/* ============================================================
+   5. Method Colors & Component Styling
+   ============================================================ */
+/* メソッドごとの変数定義 */
+.message-unit:has([data-method="GET"]), .index-item[data-method="GET"] { --m-color: #2563eb; }
+.message-unit:has([data-method="POST"]), .index-item[data-method="POST"] { --m-color: #059669; }
+.message-unit:has([data-method="PUT"]), .index-item[data-method="PUT"] { --m-color: #d97706; }
+.message-unit:has([data-method="DELETE"]), .index-item[data-method="DELETE"] { --m-color: #dc2626; }
+.message-unit:has([data-method="RES"]), .index-item[data-method="RES"] { --m-color: #7c3aed; }
+
+.method-label { display: flex; align-items: center; gap: 10px; }
+.method-label::before {
+  content: attr(data-method);
+  font-size: 0.65em;
+  font-weight: 800;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background-color: var(--m-color);
+  color: #ffffff;
+  text-transform: uppercase;
+  min-width: 45px;
+  text-align: center;
+}
+
+.path-text { color: var(--m-color); font-weight: 700; }
+
+.balloon-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+.balloon-actions { display: flex; gap: 6px; opacity: 0.2; transition: opacity 0.2s; }
+.balloon:hover .balloon-actions { opacity: 1; }
+.balloon-actions button { background: rgba(0, 0, 0, 0.05); border: none; cursor: pointer; padding: 5px 8px; border-radius: 6px; font-size: 14px; }
+
+.timestamp { display: block; font-size: 0.75em; color: #bbb; margin-bottom: 12px; }
+
+/* JSON Display Area */
+.json-display {
+  background: #f8f9fa;
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid #edf0f2;
+  border-left: 4px solid #cbd5e1;
+  font-family: 'Cascadia Code', monospace;
+  font-size: 0.85em;
+  white-space: pre;
+  overflow-x: auto;
+  color: #444;
+}
+
+.balloon.right .json-display {
+  background: rgba(255, 255, 255, 0.6);
+  border-color: rgba(0, 0, 0, 0.05);
+}
+
+.json-key { color: #8971d0; font-weight: 600; }
+.json-string { color: #5dae8b; }
+.json-value { color: #d8904d; }

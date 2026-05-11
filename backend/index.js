@@ -4,11 +4,12 @@ const express = require('express');
 const multer = require('multer');
 const cors = require('cors');
 const app = express();
-const PORT = process.env.PORT || 5000;
 const path = require('path');
 const jwt = require('jsonwebtoken');
-// トークン生成用の秘密鍵（本来は .env に配置）
-const SECRET_KEY = 'your-secret-key-12345';
+
+// from .env
+const PORT = process.env.PORT || 5000
+const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key-12345';
 
 // 保存先のストレージ設定 ---
 const storage = multer.diskStorage({
