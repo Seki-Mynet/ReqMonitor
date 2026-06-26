@@ -5,14 +5,19 @@ const { Server } = require('socket.io');
 
 const app = express();
 const server = http.createServer(app);
+const jwt = require('jsonwebtoken');
 const io = new Server(server, {
   cors: { origin: "*" } // 開発環境に合わせて調整
 });
 
-app.use(express.json());
+app.use(express.json({ type: ['application/json', 'application/json; utf-8'] }));
 
 // ここで ID を生成（リクエストとレスポンスを紐付けるための共通ID）
 const currentRequestId = Date.now();
+
+// from .env
+//const PORT = process.env.PORT || 5000
+const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key-12345';
 
 // すべてのリクエストを監視するミドルウェア
 app.use((req, res, next) => {
@@ -81,6 +86,7 @@ app.post('/api/test', (req, res) => {
 
 // 既存の app.use(...) の後に追記
 app.post('/api/get_token', (req, res) => {
+  console.log(req.body)
   const { userId, password } = req.body;
   
   // 異常なリクエストのチェック (400 Bad Request) ---
@@ -149,8 +155,27 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
-app.post('/api/update_product',authenticateToken, (req, res) => {
-  res.send({ status: 'ok' });
+app.post('/api/update_product', authenticateToken, (req, res) => {
+    const products = req.body.products;
+
+    if (products && Array.isArray(products)) {
+        // 1. 全ての商品から product_code だけを抽出して新しい配列を作る
+        // 例: ["PROD-001", "PROD-002", ...]
+        const productCodes = products.map(p => p.product_code);
+
+        console.log('Processing product codes:', productCodes);
+
+        // 2. 指定されたパラメータ名 "message" で配列を返却
+        res.json({ 
+            status: 'ok',
+            message: productCodes 
+        });
+    } else {
+        res.status(400).json({ 
+            status: 'error', 
+            message: '商品データが正しく送信されませんでした' 
+        });
+    }
 });
 
 
