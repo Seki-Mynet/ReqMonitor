@@ -1,182 +1,208 @@
-// server.js (Express)
+require('dotenv').config(); 
+
 const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
+const jwt = require('jsonwebtoken');
 
 const app = express();
 const server = http.createServer(app);
-const jwt = require('jsonwebtoken');
 const io = new Server(server, {
-  cors: { origin: "*" } // 開発環境に合わせて調整
+  cors: { origin: "*" }
 });
 
-app.use(express.json({ type: ['application/json', 'application/json; utf-8'] }));
+const PORT = process.env.PORT || 3001;
 
-// ここで ID を生成（リクエストとレスポンスを紐付けるための共通ID）
-const currentRequestId = Date.now();
 
-// from .env
-//const PORT = process.env.PORT || 5000
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key-12345';
 
-// すべてのリクエストを監視するミドルウェア
+// ==========================================
+// JA識別子(://の直後3文字)の解析ミドルウェア
+// ==========================================
 app.use((req, res, next) => {
-  const requestId = Date.now();
+  // フルURL、またはホスト名ヘッダーを取得
+  // (テスト用に req.url や独自のヘッダー、あるいは host を柔軟に結合)
+  const targetString = req.headers['x-original-url'] || req.headers.host || '';
 
-  // 1. リクエストログ（左側）を即座に送信
-  io.emit('new_request', {
-    id: requestId,
-    side: 'left',
-    method: req.method,
-    path: req.path,
-    headers: req.headers,
-    query: req.query,
-    body: req.body || {},
-    timestamp: new Date().toLocaleTimeString(),
-  });
+  // 1. "://" が含まれる場合は、その直後の3桁数字を抽出
+  // 2. "://" が含まれない場合は、先頭の3桁数字を抽出（フォールバック）
+  let match = targetString.match(/:\/\/([0-9]{3})/);
+  
+  if (!match) {
+    // プロトコル名（://）がついていないプレーンなホスト名だった場合の対応
+    match = targetString.match(/^([0-9]{3})/);
+  }
 
-  // レスポンスデータを一時保存する変数
-  let responsePayload = null;
-
-  // ログ送信用の共通関数（ここを鉄壁にする）
-  const emitResponseOnce = () => {
-    // すでに送信済みフラグがあれば、絶対に何もしない
-    if (res._hasEmittedLog) return;
-    
-    // まだデータがない場合はスキップ（finishイベントなどで呼ばれた時用）
-    if (!responsePayload && res.statusCode < 400) return;
-
-    io.emit('new_request', {
-      id: requestId + "-res",
-      side: 'right',
-      status: res.statusCode,
-      headers: res.getHeaders(),
-      body: responsePayload || { message: "No body or non-JSON response" },
-      timestamp: new Date().toLocaleTimeString(),
-    });
-
-    // フラグを立てて二度と通さないようにする
-    res._hasEmittedLog = true;
-  };
-
-  // 全ての出口をフックするが、中では保存するだけ
-  const patch = (methodName) => {
-    const original = res[methodName];
-    res[methodName] = function (data) {
-      if (!responsePayload) responsePayload = data; // 最初に届いたデータを優先
-      const result = original.apply(this, arguments);
-      emitResponseOnce(); // 送信を試みる
-      return result;
-    };
-  };
-
-  patch('send');
-  patch('json');
-
-  // 万が一 send/json が呼ばれなかった時のためのバックアップ
-  res.on('finish', emitResponseOnce);
-
+  if (match) {
+    req.jaCode = match[1]; // 000~999の文字列が格納される
+  } else {
+    req.jaCode = null; // 識別子がない、または不正な場合
+  }
+  
   next();
 });
 
-// テスト用エンドポイント
-app.post('/api/test', (req, res) => {
-  res.send({ status: 'ok' });
+// ==========================================
+// 1. すべてのリクエストを監視 ＆ 生データ強制パース
+// ==========================================
+app.use((req, res, next) => {
+  const requestId = Date.now();
+  
+  // 💡 Javaから届く生データを自前で結合してパースする
+  let dataBuffer = '';
+  req.on('data', chunk => {
+    dataBuffer += chunk;
+  });
+
+  req.on('end', () => {
+    // 届いた生データを req.body に強制格納
+    if (dataBuffer) {
+      try {
+        req.body = JSON.parse(dataBuffer);
+      } catch (e) {
+        req.body = {}; // JSONじゃなければ空
+      }
+    } else {
+      req.body = req.body || {};
+    }
+
+    // ログ送信 (JA識別子もモニタリング用に付与)
+    io.emit('new_request', {
+      id: requestId,
+      side: 'left',
+      method: req.method,
+      path: req.path,
+      jaCode: req.jaCode, // ログ画面でJAを識別できるように追加
+      headers: req.headers,
+      query: req.query,
+      body: req.body, 
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
+    let responsePayload = null;
+    const emitResponseOnce = () => {
+      if (res._hasEmittedLog) return;
+      let formattedBody = responsePayload;
+      if (typeof responsePayload === 'string') {
+        try { formattedBody = JSON.parse(responsePayload); } catch (e) {}
+      }
+      io.emit('new_request', {
+        id: requestId + "-res",
+        side: 'right',
+        status: res.statusCode,
+        headers: res.getHeaders(),
+        body: formattedBody || { message: "No body or non-JSON response" },
+        timestamp: new Date().toLocaleTimeString(),
+      });
+      res._hasEmittedLog = true;
+    };
+
+    const originalSend = res.send;
+    res.send = function (body) {
+      if (!responsePayload) responsePayload = body;
+      const result = originalSend.apply(this, arguments);
+      emitResponseOnce();
+      return result;
+    };
+
+    res.on('finish', emitResponseOnce);
+
+    // 💡 データの吸い出しが「完了してから」次のルートへ進む
+    next();
+  });
 });
 
-// 既存の app.use(...) の後に追記
-app.post('/api/get_token', (req, res) => {
-  console.log(req.body)
+// ==========================================
+// 2. 各種 API エンドポイント (共通パス /api/v1 の定義)
+// ==========================================
+const apiRouter = express.Router();
+
+// JA識別子を必須にする場合のガード用ミドルウェア (任意)
+apiRouter.use((req, res, next) => {
+  if (!req.jaCode) {
+    return res.status(400).json({ status: 'error', message: 'Invalid or missing JA identifier sub-domain.' });
+  }
+  next();
+});
+
+// 各種エンドポイントを /api/v1 配下としてマッピング
+apiRouter.post('/test', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+apiRouter.post('/get_token', (req, res) => {
   const { userId, password } = req.body;
   
-  // 異常なリクエストのチェック (400 Bad Request) ---
-  // userId または password が未定義、あるいは空文字の場合はリクエスト自体が不当とみなします
   if (!userId || !password) {
     return res.status(400).json({
       status: 400,
       error: 'Bad Request',
       message: 'The connection does not exist.',
       errorCode: 'inexistent_connection',
-      attributes: '{ "error": "Expired token received for JSON Web Token validation"  }'
+      attributes: JSON.stringify({ error: "Expired token received for JSON Web Token validation" })
     });
   }
 
-  // 認証チェック (401 Unauthorized) ---
-  // 簡易的なユーザーチェック（本来はDBと照合します）
   if (userId === 'admin' && password === 'password123') {
-    // 1. ペイロード（含めたいデータ）を作成
-    const payload = {
-      uid: userId,
-      role: 'admin'
-    };
-
-    // 2. トークンを発行（有効期限 1時間）
+    const payload = { uid: userId, role: 'admin', jaCode: req.jaCode };
     const token = jwt.sign(payload, SECRET_KEY, { expiresIn: '1h' });
-
-    // 3. トークンを返す
-    return res.json({
-      token: token
-    });
+    return res.json({ token: token });
   }
 
-  // 認証失敗
   res.status(401).json({
     status: 401,
     error: 'Unauthorized',
     message: 'Authentication failed.',
     errorCode: 'inexistent_connection',
-    attributes: '{ "error": "Expired token received for JSON Web Token validation"  }'
+    attributes: JSON.stringify({ error: "Expired token received for JSON Web Token validation" })
   });
 });
 
-// 認証ミドルウェア (既存のものを流用) ---
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ');
+  const parts = authHeader && authHeader.split(' ');
     
-  if (!token) return res.status(401).json({ 
-    status: 401,
-    error: 'Unauthorized',
-    message: 'No token.',
-    errorCode: 'inexistent_connection',
-    attributes: '{ "error": "Expired token received for JSON Web Token validation"  }' 
-  });
-
-  jwt.verify(token[1], SECRET_KEY, (err, user) => {
-    if (err) return res.status(401).json({ 
+  if (!parts || parts.length !== 2 || parts[0] !== 'Bearer') {
+    return res.status(401).json({ 
       status: 401,
       error: 'Unauthorized',
-      message: 'Not Authorization.',
+      message: 'No token or invalid format.',
       errorCode: 'inexistent_connection',
-      attributes: '{ "error": "Expired token received for JSON Web Token validation"  }' 
+      attributes: JSON.stringify({ error: "Invalid token format received" })
     });
+  }
+
+  const token = parts[1];
+  jwt.verify(token, SECRET_KEY, (err, user) => {
+    if (err) {
+      return res.status(401).json({ 
+        status: 401,
+        error: 'Unauthorized',
+        message: 'Not Authorization.',
+        errorCode: 'inexistent_connection',
+        attributes: JSON.stringify({ error: "Expired or invalid token" })
+      });
+    }
     req.user = user;
     next();
   });
 };
 
-app.post('/api/update_product', authenticateToken, (req, res) => {
+apiRouter.post('/update_product', authenticateToken, (req, res) => {
     const products = req.body.products;
 
     if (products && Array.isArray(products)) {
-        // 1. 全ての商品から product_code だけを抽出して新しい配列を作る
-        // 例: ["PROD-001", "PROD-002", ...]
         const productCodes = products.map(p => p.product_code);
-
-        console.log('Processing product codes:', productCodes);
-
-        // 2. 指定されたパラメータ名 "message" で配列を返却
-        res.json({ 
-            status: 'ok',
-            message: productCodes 
-        });
+        console.log(`[JA: ${req.jaCode}] Processing product codes:`, productCodes);
+        res.json({ status: 'ok', message: productCodes, jaCode: req.jaCode });
     } else {
-        res.status(400).json({ 
-            status: 'error', 
-            message: '商品データが正しく送信されませんでした' 
-        });
+        res.status(400).json({ status: 'error', message: '商品データが正しく送信されませんでした' });
     }
 });
 
+// ルーターを /api/v1 に紐付け
+app.use('/api/v1', apiRouter);
 
-server.listen(3001, () => console.log('Server running on port 3001'));
+server.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+});
