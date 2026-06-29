@@ -2,8 +2,8 @@ import { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
-// Socket.ioのインスタンス作成
-const socket = io('http://localhost:3001');
+// 修正後：.env の VITE_API_URL から動的に読み込む
+const socket = io(import.meta.env.VITE_API_URL);
 
 // --- ヘルパーコンポーネント ---
 
