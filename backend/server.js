@@ -203,6 +203,6 @@ apiRouter.post('/update_product', authenticateToken, (req, res) => {
 // ルーターを /api/v1 に紐付け
 app.use('/api/v1', apiRouter);
 
-server.listen(PORT, () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
