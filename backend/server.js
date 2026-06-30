@@ -4,6 +4,9 @@ const express = require('express');
 const http = require('http');
 const { Server } = require('socket.io');
 const jwt = require('jsonwebtoken');
+const fs = require('fs');
+const path = require('path');
+const multer = require('multer');
 
 const app = express();
 const server = http.createServer(app);
@@ -12,67 +15,111 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 3001;
-
-
 const SECRET_KEY = process.env.SECRET_KEY || 'your-secret-key-12345';
+
+// 保存先ディレクトリのパス設定と作成
+const UPLOAD_DIR = path.join(__dirname, 'backend', 'images');
+if (!fs.existsSync(UPLOAD_DIR)) {
+  fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+}
+
+// ディスク保存用の設定
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, UPLOAD_DIR);
+  },
+  filename: (req, file, cb) => {
+    cb(null, file.originalname);
+  }
+});
+const upload = multer({ storage: storage });
 
 // ==========================================
 // JA識別子(://の直後3文字)の解析ミドルウェア
 // ==========================================
 app.use((req, res, next) => {
-  // フルURL、またはホスト名ヘッダーを取得
-  // (テスト用に req.url や独自のヘッダー、あるいは host を柔軟に結合)
   const targetString = req.headers['x-original-url'] || req.headers.host || '';
-
-  // 1. "://" が含まれる場合は、その直後の3桁数字を抽出
-  // 2. "://" が含まれない場合は、先頭の3桁数字を抽出（フォールバック）
   let match = targetString.match(/:\/\/([0-9]{3})/);
   
   if (!match) {
-    // プロトコル名（://）がついていないプレーンなホスト名だった場合の対応
     match = targetString.match(/^([0-9]{3})/);
   }
 
   if (match) {
-    req.jaCode = match[1]; // 000~999の文字列が格納される
+    req.jaCode = match[1];
   } else {
-    req.jaCode = null; // 識別子がない、または不正な場合
+    req.jaCode = null;
   }
   
   next();
 });
 
 // ==========================================
-// 1. すべてのリクエストを監視 ＆ 生データ強制パース
+// 1. すべてのリクエストを監視 ＆ 生データパース
 // ==========================================
 app.use((req, res, next) => {
   const requestId = Date.now();
-  
-  // 💡 Javaから届く生データを自前で結合してパースする
+  const isMultipart = req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data');
+
+  if (isMultipart) {
+    io.emit('new_request', {
+      id: requestId,
+      side: 'left',
+      method: req.method,
+      path: req.path,
+      jaCode: req.jaCode,
+      headers: req.headers,
+      query: req.query,
+      body: "[Multipart Form Data]", 
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
+    const emitResponseOnce = () => {
+      if (res._hasEmittedLog) return;
+      io.emit('new_request', {
+        id: requestId + "-res",
+        side: 'right',
+        status: res.statusCode,
+        headers: res.getHeaders(),
+        body: { message: `Multipart response processed with status ${res.statusCode}` },
+        timestamp: new Date().toLocaleTimeString(),
+      });
+      res._hasEmittedLog = true;
+    };
+
+    const originalSend = res.send;
+    res.send = function (body) {
+      const result = originalSend.apply(this, arguments);
+      emitResponseOnce();
+      return result;
+    };
+    res.on('finish', emitResponseOnce);
+
+    return next();
+  }
+
   let dataBuffer = '';
   req.on('data', chunk => {
     dataBuffer += chunk;
   });
 
   req.on('end', () => {
-    // 届いた生データを req.body に強制格納
     if (dataBuffer) {
       try {
         req.body = JSON.parse(dataBuffer);
       } catch (e) {
-        req.body = {}; // JSONじゃなければ空
+        req.body = {};
       }
     } else {
       req.body = req.body || {};
     }
 
-    // ログ送信 (JA識別子もモニタリング用に付与)
     io.emit('new_request', {
       id: requestId,
       side: 'left',
       method: req.method,
       path: req.path,
-      jaCode: req.jaCode, // ログ画面でJAを識別できるように追加
+      jaCode: req.jaCode,
       headers: req.headers,
       query: req.query,
       body: req.body, 
@@ -106,18 +153,15 @@ app.use((req, res, next) => {
     };
 
     res.on('finish', emitResponseOnce);
-
-    // 💡 データの吸い出しが「完了してから」次のルートへ進む
     next();
   });
 });
 
 // ==========================================
-// 2. 各種 API エンドポイント (共通パス /api/v1 の定義)
+// 2. 各種 API エンドポイント
 // ==========================================
 const apiRouter = express.Router();
 
-// JA識別子を必須にする場合のガード用ミドルウェア (任意)
 apiRouter.use((req, res, next) => {
   if (!req.jaCode) {
     return res.status(400).json({ status: 'error', message: 'Invalid or missing JA identifier sub-domain.' });
@@ -125,39 +169,7 @@ apiRouter.use((req, res, next) => {
   next();
 });
 
-// 各種エンドポイントを /api/v1 配下としてマッピング
-apiRouter.post('/test', (req, res) => {
-  res.json({ status: 'ok' });
-});
-
-apiRouter.post('/get_token', (req, res) => {
-  const { userId, password } = req.body;
-  
-  if (!userId || !password) {
-    return res.status(400).json({
-      status: 400,
-      error: 'Bad Request',
-      message: 'The connection does not exist.',
-      errorCode: 'inexistent_connection',
-      attributes: JSON.stringify({ error: "Expired token received for JSON Web Token validation" })
-    });
-  }
-
-  if (userId === 'admin' && password === 'password123') {
-    const payload = { uid: userId, role: 'admin', jaCode: req.jaCode };
-    const token = jwt.sign(payload, SECRET_KEY, { expiresIn: '1h' });
-    return res.json({ token: token });
-  }
-
-  res.status(401).json({
-    status: 401,
-    error: 'Unauthorized',
-    message: 'Authentication failed.',
-    errorCode: 'inexistent_connection',
-    attributes: JSON.stringify({ error: "Expired token received for JSON Web Token validation" })
-  });
-});
-
+// トークン検証用ミドルウェア
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
   const parts = authHeader && authHeader.split(' ');
@@ -188,9 +200,53 @@ const authenticateToken = (req, res, next) => {
   });
 };
 
+// ------------------------------------------
+// 新設：商品画像アップロードエンドポイント（ファイル名一覧返却版）
+// ------------------------------------------
+apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), (req, res) => {
+  // アップロードされた各ファイルからオリジナルのファイル名を取り出して配列を作成
+  const fileNames = req.files ? req.files.map(file => file.originalname) : [];
+  
+  // 指定されたJSONフォーマットでレスポンスを返す
+  res.json({
+    message: fileNames
+  });
+});
+
+// 既存のエンドポイント
+apiRouter.post('/test', (req, res) => {
+  res.json({ status: 'ok' });
+});
+
+apiRouter.post('/get_token', (req, res) => {
+  const { userId, password } = req.body;
+  if (!userId || !password) {
+    return res.status(400).json({
+      status: 400,
+      error: 'Bad Request',
+      message: 'The connection does not exist.',
+      errorCode: 'inexistent_connection',
+      attributes: JSON.stringify({ error: "Expired token received for JSON Web Token validation" })
+    });
+  }
+
+  if (userId === 'admin' && password === 'password123') {
+    const payload = { uid: userId, role: 'admin', jaCode: req.jaCode };
+    const token = jwt.sign(payload, SECRET_KEY, { expiresIn: '1h' });
+    return res.json({ token: token });
+  }
+
+  res.status(401).json({
+    status: 401,
+    error: 'Unauthorized',
+    message: 'Authentication failed.',
+    errorCode: 'inexistent_connection',
+    attributes: JSON.stringify({ error: "Expired token received for JSON Web Token validation" })
+  });
+});
+
 apiRouter.post('/update_product', authenticateToken, (req, res) => {
     const products = req.body.products;
-
     if (products && Array.isArray(products)) {
         const productCodes = products.map(p => p.product_code);
         console.log(`[JA: ${req.jaCode}] Processing product codes:`, productCodes);
@@ -200,7 +256,6 @@ apiRouter.post('/update_product', authenticateToken, (req, res) => {
     }
 });
 
-// ルーターを /api/v1 に紐付け
 app.use('/api/v1', apiRouter);
 
 server.listen(PORT, '0.0.0.0', () => {
