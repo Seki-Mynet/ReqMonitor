@@ -194,7 +194,7 @@ apiRouter.post('/update_product', authenticateToken, (req, res) => {
     if (products && Array.isArray(products)) {
         const productCodes = products.map(p => p.product_code);
         console.log(`[JA: ${req.jaCode}] Processing product codes:`, productCodes);
-        res.json({ status: 'ok', message: productCodes, jaCode: req.jaCode });
+        res.json({ status: 'ok', message: productCodes });
     } else {
         res.status(400).json({ status: 'error', message: '商品データが正しく送信されませんでした' });
     }
