@@ -6,8 +6,16 @@ const socket = io(import.meta.env.VITE_API_URL);
 
 // --- ヘルパーコンポーネント ---
 
+// どんなデータ型が来ても安全に色付けして整形表示する関数
 const renderJson = (json) => {
-  const jsonString = JSON.stringify(json, null, 2);
+  // もしオブジェクトではなく単なる文字列が送られてきた場合は、JSON化せずにそのままテキストとして扱う
+  let jsonString = "";
+  if (typeof json === 'object' && json !== null) {
+    jsonString = JSON.stringify(json, null, 2);
+  } else {
+    jsonString = String(json);
+  }
+
   return jsonString.split('\n').map((line, i) => {
     const highlightedLine = line
       .replace(/"([^"]+)":/g, '<span class="json-key">"$1"</span>:')
@@ -22,8 +30,14 @@ const renderJson = (json) => {
   });
 };
 
+// 文字列・オブジェクト両対応の安全な情報セクション
 const InfoSection = ({ title, data }) => {
-  if (!data || Object.keys(data).length === 0) return null;
+  // データの存在チェックを安全に行う
+  if (data === undefined || data === null || data === '') return null;
+  
+  // オブジェクト型の場合のみ中身が空かチェック
+  if (typeof data === 'object' && Object.keys(data).length === 0) return null;
+
   return (
     <div style={{ marginTop: '10px', textAlign: 'left' }}>
       <span style={{ fontSize: '0.7em', fontWeight: 'bold', color: '#999', textTransform: 'uppercase' }}>
