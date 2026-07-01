@@ -23,9 +23,7 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// ==========================================
-// ★【追加】フロントから画像へアクセスできるように静的ファイルとして公開
-// ==========================================
+// フロントから画像へアクセスできるように静的ファイルとして公開
 app.use('/images', express.static(UPLOAD_DIR));
 
 // ディスク保存用の設定
@@ -66,20 +64,10 @@ app.use((req, res, next) => {
   const requestId = Date.now();
   const isMultipart = req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data');
 
-  // マルチパートの時は、ここの初期段階では body の詳細が取れないためログ通知のみ行う
+  // 【大幅修正】マルチパート（画像アップロード）の時
   if (isMultipart) {
-    io.emit('new_request', {
-      id: requestId,
-      side: 'left',
-      method: req.method,
-      path: req.path,
-      jaCode: req.jaCode,
-      headers: req.headers,
-      query: req.query,
-      body: "[Multipart Form Data]", 
-      timestamp: new Date().toLocaleTimeString(),
-    });
-
+    // ここでの「不完全な状態（初期段階）」での io.emit は行わないようにコメントアウト/削除します。
+    // 代わりに、レスポンス（右側の吹き出し）をキャッチする仕組みだけを動かします。
     const emitResponseOnce = () => {
       if (res._hasEmittedLog) return;
       io.emit('new_request', {
@@ -101,9 +89,10 @@ app.use((req, res, next) => {
     };
     res.on('finish', emitResponseOnce);
 
-    return next();
+    return next(); // 次の処理（multerおよびエンドポイント）へ進む
   }
 
+  // 通常のJSONリクエスト時の処理（変更なし）
   let dataBuffer = '';
   req.on('data', chunk => {
     dataBuffer += chunk;
@@ -207,7 +196,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// ★【修正版】商品画像アップロードエンドポイント（Request Body 表示対応）
+// 商品画像アップロードエンドポイント（完全にパースされたデータを送る版）
 // ------------------------------------------
 apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), (req, res) => {
   const fileNames = req.files ? req.files.map(file => file.originalname) : [];
@@ -216,11 +205,9 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
   const baseUrl = `${req.protocol}://${req.get('host')}`; 
   const imageUrls = req.files ? req.files.map(file => `${baseUrl}/images/${file.filename}`) : [];
 
-  // 【解説】multer を通過したことで、ファイル情報（req.files）や
-  // 一緒に送られてきたテキストパラメータ（req.body）が利用可能になっています。
-  // これらを綺麗に整形してモニターの「Request Body」欄に表示させます。
+  // multer を通過して、完全に解析し終わったデータをここで組み立てて画面へ送る
   const formattedBody = {
-    info: "Multipart Form Data を正常にパースしました",
+    info: "Multipart Form Data パース完了",
     uploaded_files_count: req.files ? req.files.length : 0,
     files: req.files ? req.files.map(file => ({
       fieldname: file.fieldname,
@@ -228,11 +215,10 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
       mimetype: file.mimetype,
       size: `${(file.size / 1024).toFixed(2)} KB`
     })) : [],
-    // もしJava側などから、画像と一緒にテキストデータ（JANコード等）がFormDataとして送られていればここに入ります
     text_parameters: req.body || {} 
   };
 
-  // 確定した情報とURLリスト（images）を載せてSocket通知を送信
+  // ここで正式に左側の吹き出し用ログ（new_request）を発行
   io.emit('new_request', {
     id: Date.now(),
     side: 'left',
@@ -241,12 +227,11 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
     jaCode: req.jaCode,
     headers: req.headers,
     query: req.query,
-    body: formattedBody, // ★ 文字列ではなく、パース済みのオブジェクトを渡すことで色付け表示されます
+    body: formattedBody, // これでフロントエンドにオブジェクトとして渡る
     images: imageUrls, 
     timestamp: new Date().toLocaleTimeString(),
   });
   
-  // 指定されたJSONフォーマットでレスポンスを返す
   res.json({
     message: fileNames
   });
