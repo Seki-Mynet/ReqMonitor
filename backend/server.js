@@ -207,7 +207,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// ★【修正】商品画像アップロードエンドポイント（リアルタイム画像表示版）
+// ★【修正版】商品画像アップロードエンドポイント（Request Body 表示対応）
 // ------------------------------------------
 apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), (req, res) => {
   const fileNames = req.files ? req.files.map(file => file.originalname) : [];
@@ -216,7 +216,23 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
   const baseUrl = `${req.protocol}://${req.get('host')}`; 
   const imageUrls = req.files ? req.files.map(file => `${baseUrl}/images/${file.filename}`) : [];
 
-  // 画像が正常に保存されたため、確定したURLリスト（images）を載せてSocket通知を再送する
+  // 【解説】multer を通過したことで、ファイル情報（req.files）や
+  // 一緒に送られてきたテキストパラメータ（req.body）が利用可能になっています。
+  // これらを綺麗に整形してモニターの「Request Body」欄に表示させます。
+  const formattedBody = {
+    info: "Multipart Form Data を正常にパースしました",
+    uploaded_files_count: req.files ? req.files.length : 0,
+    files: req.files ? req.files.map(file => ({
+      fieldname: file.fieldname,
+      originalname: file.originalname,
+      mimetype: file.mimetype,
+      size: `${(file.size / 1024).toFixed(2)} KB`
+    })) : [],
+    // もしJava側などから、画像と一緒にテキストデータ（JANコード等）がFormDataとして送られていればここに入ります
+    text_parameters: req.body || {} 
+  };
+
+  // 確定した情報とURLリスト（images）を載せてSocket通知を送信
   io.emit('new_request', {
     id: Date.now(),
     side: 'left',
@@ -225,8 +241,8 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
     jaCode: req.jaCode,
     headers: req.headers,
     query: req.query,
-    body: "[Multipart Form Data] 画像ファイルを処理しました",
-    images: imageUrls, // ★ここがフロントエンド（App.jsx）の ImagePreviewSection に渡ります
+    body: formattedBody, // ★ 文字列ではなく、パース済みのオブジェクトを渡すことで色付け表示されます
+    images: imageUrls, 
     timestamp: new Date().toLocaleTimeString(),
   });
   
