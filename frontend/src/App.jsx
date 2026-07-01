@@ -50,6 +50,11 @@ const InfoSection = ({ title, data }) => {
   );
 };
 
+socket.on('new_request', (data) => {
+      console.log("★Socketから届いた生データ:", data); // ← これを1行追加してテスト送信する
+      setMessages((prev) => [...prev, data]);
+    });
+
 // ★ 新設：画像プレビュー用のセクション
 const ImagePreviewSection = ({ title, urls }) => {
   if (!urls || urls.length === 0) return null;
