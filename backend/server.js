@@ -62,12 +62,13 @@ app.use((req, res, next) => {
 // ==========================================
 app.use((req, res, next) => {
   const requestId = Date.now();
-  const isMultipart = req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data');
+  
+  // ★修正：toLowerCase() を追加して、大文字・小文字どちらで届いても確実にキャッチする
+  const contentType = req.headers['content-type'] || '';
+  const isMultipart = contentType.toLowerCase().includes('multipart/form-data');
 
-  // 【大幅修正】マルチパート（画像アップロード）の時
+  // マルチパート（画像アップロード）の時
   if (isMultipart) {
-    // ここでの「不完全な状態（初期段階）」での io.emit は行わないようにコメントアウト/削除します。
-    // 代わりに、レスポンス（右側の吹き出し）をキャッチする仕組みだけを動かします。
     const emitResponseOnce = () => {
       if (res._hasEmittedLog) return;
       io.emit('new_request', {
@@ -89,7 +90,7 @@ app.use((req, res, next) => {
     };
     res.on('finish', emitResponseOnce);
 
-    return next(); // 次の処理（multerおよびエンドポイント）へ進む
+    return next(); // これで確実にすり抜けず、下の /uploadproductimages エンドポイントへ進みます
   }
 
   // 通常のJSONリクエスト時の処理（変更なし）
