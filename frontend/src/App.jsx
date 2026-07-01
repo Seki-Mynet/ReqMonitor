@@ -273,15 +273,32 @@ function App() {
                       </>
                     ) : (
                       <>
-                        <InfoSection title="Request Headers" data={msg.headers} />
-                        <InfoSection title="Query Parameters" data={msg.query} />
-                        
-                        {/* ★修正：msg.body をそのままシンプルに渡す（二重ラップ { body: msg.body } を廃止） */}
                         <InfoSection title="Request Body" data={msg.body} />
                         
-                        {/* 画像があれば下部にプレビューを並べる */}
-                        {msg.images && msg.images.length > 0 && (
-                          <ImagePreviewSection title="Uploaded Images Preview" urls={msg.images} />
+                        {/* ★ 修正：body.files の中の画像データを直接読み込んでプレビュー出力する */}
+                        {msg.body && msg.body.files && msg.body.files.some(f => f.imageData) && (
+                          <div style={{ marginTop: '10px', textAlign: 'left' }}>
+                            <span style={{ fontSize: '0.7em', fontWeight: 'bold', color: '#999', textTransform: 'uppercase' }}>
+                              📦 Uploaded Images Preview (Direct Data)
+                            </span>
+                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '10px', marginTop: '5px', padding: '10px', backgroundColor: '#1e1e1e', borderRadius: '5px' }}>
+                              {msg.body.files.map((file, idx) => {
+                                if (!file.imageData) return null;
+                                return (
+                                  <div key={idx} style={{ textAlign: 'center' }}>
+                                    <img 
+                                      src={file.imageData} // ★ URLではなく、画像データそのものを直接流し込む！
+                                      alt={file.originalname} 
+                                      style={{ width: '80px', height: '80px', objectFit: 'contain', border: '1px solid #444', borderRadius: '4px', backgroundColor: '#2d2d2d' }} 
+                                    />
+                                    <div style={{ fontSize: '0.6em', color: '#aaa', width: '80px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                      {file.originalname}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
                         )}
                       </>
                     )}

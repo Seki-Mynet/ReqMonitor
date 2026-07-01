@@ -197,28 +197,33 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// 商品画像アップロードエンドポイント（画像URL構造強化版）
+// 商品画像アップロード（画像データそのものをJSONに埋め込む版）
 // ------------------------------------------
 apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), (req, res) => {
   const fileNames = req.files ? req.files.map(file => file.originalname) : [];
   
-  // フロントエンドから画像に直接アクセスできるようにフルURLの配列を生成
-  const baseUrl = `${req.protocol}://${req.get('host')}`; 
-  const imageUrls = req.files ? req.files.map(file => `${baseUrl}/images/${file.filename}`) : [];
-
   // 画面に表示するオブジェクトを組み立てる
   const formattedBody = {
-    info: "Multipart Form Data パース完了",
+    info: "Multipart Form Data パース完了（画像データ内包版）",
     uploaded_files_count: req.files ? req.files.length : 0,
-    files: req.files ? req.files.map(file => ({
-      fieldname: file.fieldname,
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-      size: `${(file.size / 1024).toFixed(2)} KB`
-    })) : [],
-    // ★【ここを追加】body の中にも直接イメージのURL配列を含める
-    images: imageUrls, 
-    text_parameters: req.body || {} 
+    files: req.files ? req.files.map(file => {
+      // ★ 追加：サーバーに保存された画像ファイルを直接読み込んで Base64 に変換する
+      const filePath = file.path;
+      const fileBuffer = fs.readFileSync(filePath);
+      const base64Data = fileBuffer.toString('base64');
+      
+      // フロントエンドの <img> タグでそのまま使えるデータURI形式にする
+      const imageDataUri = `data:${file.mimetype};base64,${base64Data}`;
+
+      return {
+        fieldname: file.fieldname,
+        originalname: file.originalname,
+        mimetype: file.mimetype,
+        size: `${(file.size / 1024).toFixed(2)} KB`,
+        // ★ ここに画像そのもののデータを格納！
+        imageData: imageDataUri 
+      };
+    }) : []
   };
 
   // Socket通知を送信
@@ -230,14 +235,11 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
     jaCode: req.jaCode,
     headers: req.headers,
     query: req.query,
-    body: formattedBody, 
-    images: imageUrls, // 外側にも残しておく（フロントの既存ロジック用）
+    body: formattedBody, // filesの中に画像そのものが含まれた状態
     timestamp: new Date().toLocaleTimeString(),
   });
   
-  res.json({
-    message: fileNames
-  });
+  res.json({ message: fileNames });
 });
 
 // 既存のエンドポイント
