@@ -23,6 +23,11 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
+// ==========================================
+// ★【追加】フロントから画像へアクセスできるように静的ファイルとして公開
+// ==========================================
+app.use('/images', express.static(UPLOAD_DIR));
+
 // ディスク保存用の設定
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -61,6 +66,7 @@ app.use((req, res, next) => {
   const requestId = Date.now();
   const isMultipart = req.headers['content-type'] && req.headers['content-type'].includes('multipart/form-data');
 
+  // マルチパートの時は、ここの初期段階では body の詳細が取れないためログ通知のみ行う
   if (isMultipart) {
     io.emit('new_request', {
       id: requestId,
@@ -201,11 +207,28 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// 新設：商品画像アップロードエンドポイント（ファイル名一覧返却版）
+// ★【修正】商品画像アップロードエンドポイント（リアルタイム画像表示版）
 // ------------------------------------------
 apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), (req, res) => {
-  // アップロードされた各ファイルからオリジナルのファイル名を取り出して配列を作成
   const fileNames = req.files ? req.files.map(file => file.originalname) : [];
+  
+  // フロントエンドから画像に直接アクセスできるようにフルURLの配列を生成
+  const baseUrl = `${req.protocol}://${req.get('host')}`; 
+  const imageUrls = req.files ? req.files.map(file => `${baseUrl}/images/${file.filename}`) : [];
+
+  // 画像が正常に保存されたため、確定したURLリスト（images）を載せてSocket通知を再送する
+  io.emit('new_request', {
+    id: Date.now(),
+    side: 'left',
+    method: req.method,
+    path: req.path,
+    jaCode: req.jaCode,
+    headers: req.headers,
+    query: req.query,
+    body: "[Multipart Form Data] 画像ファイルを処理しました",
+    images: imageUrls, // ★ここがフロントエンド（App.jsx）の ImagePreviewSection に渡ります
+    timestamp: new Date().toLocaleTimeString(),
+  });
   
   // 指定されたJSONフォーマットでレスポンスを返す
   res.json({

@@ -2,12 +2,10 @@ import { useEffect, useState, useRef } from 'react';
 import { io } from 'socket.io-client';
 import './App.css';
 
-// 修正後：.env の VITE_API_URL から動的に読み込む
 const socket = io(import.meta.env.VITE_API_URL);
 
 // --- ヘルパーコンポーネント ---
 
-// JSONを色分けして整形表示する関数
 const renderJson = (json) => {
   const jsonString = JSON.stringify(json, null, 2);
   return jsonString.split('\n').map((line, i) => {
@@ -24,7 +22,6 @@ const renderJson = (json) => {
   });
 };
 
-// ラベル付きJSONセクション
 const InfoSection = ({ title, data }) => {
   if (!data || Object.keys(data).length === 0) return null;
   return (
@@ -39,6 +36,48 @@ const InfoSection = ({ title, data }) => {
   );
 };
 
+// ★ 新設：画像プレビュー用のセクション
+const ImagePreviewSection = ({ title, urls }) => {
+  if (!urls || urls.length === 0) return null;
+  return (
+    <div style={{ marginTop: '10px', textAlign: 'left' }}>
+      <span style={{ fontSize: '0.7em', fontWeight: 'bold', color: '#999', textTransform: 'uppercase' }}>
+        {title} ({urls.length}件)
+      </span>
+      <div style={{ 
+        display: 'flex', 
+        flexWrap: 'wrap', 
+        gap: '10px', 
+        marginTop: '5px',
+        padding: '10px',
+        backgroundColor: '#1e1e1e', // ログ画面のトーンに合わせた背景
+        borderRadius: '5px',
+        maxHeight: '300px',
+        overflowY: 'auto'
+      }}>
+        {urls.map((url, idx) => (
+          <div key={idx} className="preview-image-wrapper" style={{ position: 'relative' }}>
+            <img 
+              src={url} 
+              alt={`uploaded-${idx}`} 
+              style={{ 
+                width: '80px', 
+                height: '80px', 
+                objectFit: 'contain', 
+                border: '1px solid #444',
+                borderRadius: '4px',
+                backgroundColor: '#2d2d2d'
+              }} 
+              // 万が一画像読み込みに失敗した時のフォールバック
+              onError={(e) => { e.target.style.display = 'none'; }}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 // --- メインコンポーネント ---
 
 function App() {
@@ -46,7 +85,6 @@ function App() {
   const [connectionStatus, setConnectionStatus] = useState('connecting');
   const newestRequestRef = useRef(null);
 
-  // 1. Socket通信の管理
   useEffect(() => {
     socket.on('connect', () => setConnectionStatus('connected'));
     socket.on('disconnect', () => setConnectionStatus('disconnected'));
@@ -64,7 +102,6 @@ function App() {
     };
   }, []);
 
-  // 2. 自動スクロール (新しいメッセージが来た時)
   useEffect(() => {
     if (newestRequestRef.current) {
       newestRequestRef.current.scrollIntoView({
@@ -74,13 +111,10 @@ function App() {
     }
   }, [messages]);
 
-  // 最新のリクエスト(左側)のインデックスを探す
   const lastRequestIndex = [...messages].reverse().findIndex(m => m.side !== 'right');
   const targetIndex = lastRequestIndex !== -1 ? (messages.length - 1 - lastRequestIndex) : -1;
 
-  // 3. 履歴クリック時の手動スクロール
   const scrollToRequest = (id) => {
-    // IDを確実に紐付けるため unit-ID を取得
     const element = document.getElementById(`unit-${id}`);
     if (element) {
       element.scrollIntoView({
@@ -90,16 +124,14 @@ function App() {
     }
   };
 
-  // 4. コピー＆ダウンロードハンドラー
   const getFormattedText = (msg) => {
     const isRes = msg.side === 'right';
     
-    // 出力用オブジェクトの構築
     const output = isRes ? {
       type: "RESPONSE",
       status: msg.status,
       timestamp: msg.timestamp,
-      headers: msg.headers || {}, // レスポンスヘッダーを追加
+      headers: msg.headers || {},
       body: msg.body
     } : {
       type: "REQUEST",
@@ -108,7 +140,8 @@ function App() {
       timestamp: msg.timestamp,
       headers: msg.headers || {},
       query: msg.query || {},
-      body: msg.body
+      body: msg.body,
+      images: msg.images || [] // クリップボード/DL用データにも一応画像URLを含める
     };
 
     return JSON.stringify(output, null, 2);
@@ -117,7 +150,6 @@ function App() {
   const handleCopy = (msg) => {
     const text = getFormattedText(msg);
     navigator.clipboard.writeText(text).then(() => {
-      // 任意：コピー完了のフィードバック（アラートなど）
       console.log("Copied to clipboard");
     });
   };
@@ -145,7 +177,6 @@ function App() {
     URL.revokeObjectURL(url);
   };
 
-  // 履歴用データ (最新が上)
   const requestHistory = [...messages]
     .filter(m => m.side !== 'right')
     .reverse();
@@ -158,12 +189,9 @@ function App() {
           <div className="live-dot"></div>
           {connectionStatus.toUpperCase()}
         </div>
-        <title>REQ MONITOR</title>
-        <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛰️</text></svg>"></link>
       </header>
 
       <div className="main-layout">
-        {/* --- App.jsx サイドバー部分 --- */}
         <aside className="sidebar">
           <div className="sidebar-header">HISTORY (NEWEST)</div>
           <div className="index-list">
@@ -186,7 +214,6 @@ function App() {
           </div>
         </aside>
 
-        {/* メインチャット欄 */}
         <main className="content-area">
           <div className="balloon-container">
             {messages.map((msg, index) => {
@@ -196,7 +223,7 @@ function App() {
               return (
                 <div 
                   key={msg.id} 
-                  id={`unit-${msg.id}`} // ここにIDを付与してスクロールのターゲットにする
+                  id={`unit-${msg.id}`} 
                   className="message-unit"
                   ref={isTargetUnit ? newestRequestRef : null}
                 >
@@ -222,7 +249,6 @@ function App() {
 
                     {isRight ? (
                       <>
-                        {/* レスポンス側にも Headers を追加 */}
                         <InfoSection title="Response Headers" data={msg.headers} />
                         <InfoSection title="Response Body" data={msg.body} />
                       </>
@@ -230,7 +256,16 @@ function App() {
                       <>
                         <InfoSection title="Request Headers" data={msg.headers} />
                         <InfoSection title="Query Parameters" data={msg.query} />
-                        <InfoSection title="Request Body" data={msg.body} />
+                        
+                        {/* ★ 修正箇所：画像データがある場合はプレビュー、なければ通常のBodyを表示 */}
+                        {msg.images && msg.images.length > 0 ? (
+                          <>
+                            <InfoSection title="Request Body" data={{ body: msg.body }} />
+                            <ImagePreviewSection title="Uploaded Images Preview" urls={msg.images} />
+                          </>
+                        ) : (
+                          <InfoSection title="Request Body" data={msg.body} />
+                        )}
                       </>
                     )}
                   </div>
