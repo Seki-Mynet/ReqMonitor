@@ -166,11 +166,43 @@ function App() {
     return JSON.stringify(output, null, 2);
   };
 
-  const handleCopy = (msg) => {
+const handleCopy = (msg) => {
     const text = getFormattedText(msg);
-    navigator.clipboard.writeText(text).then(() => {
-      console.log("Copied to clipboard");
-    });
+
+    // 1. まず標準のモダンなコピー機能を試す
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text)
+        .then(() => console.log("Copied via Clipboard API"))
+        .catch((err) => console.error("Clipboard API failed:", err));
+      return;
+    }
+
+    // 2. 【セキュリティ制限でのブロック対策】
+    // 非セキュア環境（http://192.168...等）の場合は、一時的にテキストエリアを作ってコピーを強制実行する
+    try {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      
+      // 画面の外側に配置して見えないようにする
+      textArea.style.position = "fixed";
+      textArea.style.left = "-999999px";
+      textArea.style.top = "-999999px";
+      document.body.appendChild(textArea);
+      
+      textArea.focus();
+      textArea.select();
+      
+      const successful = document.execCommand('copy');
+      document.body.removeChild(textArea);
+      
+      if (successful) {
+        console.log("Copied via execCommand (Fallback)");
+      } else {
+        console.error("Fallback copy failed");
+      }
+    } catch (err) {
+      console.error("Fallback execution failed:", err);
+    }
   };
 
   const handleDownload = (msg) => {
