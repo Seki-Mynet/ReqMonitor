@@ -257,14 +257,12 @@ function App() {
                         <InfoSection title="Request Headers" data={msg.headers} />
                         <InfoSection title="Query Parameters" data={msg.query} />
                         
-                        {/* ★ 修正箇所：画像データがある場合はプレビュー、なければ通常のBodyを表示 */}
-                        {msg.images && msg.images.length > 0 ? (
-                          <>
-                            <InfoSection title="Request Body" data={{ body: msg.body }} />
-                            <ImagePreviewSection title="Uploaded Images Preview" urls={msg.images} />
-                          </>
-                        ) : (
-                          <InfoSection title="Request Body" data={msg.body} />
+                        {/* ★修正：msg.body をそのままシンプルに渡す（二重ラップ { body: msg.body } を廃止） */}
+                        <InfoSection title="Request Body" data={msg.body} />
+                        
+                        {/* 画像があれば下部にプレビューを並べる */}
+                        {msg.images && msg.images.length > 0 && (
+                          <ImagePreviewSection title="Uploaded Images Preview" urls={msg.images} />
                         )}
                       </>
                     )}
