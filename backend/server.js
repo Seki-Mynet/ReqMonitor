@@ -62,13 +62,16 @@ app.use((req, res, next) => {
 // ==========================================
 app.use((req, res, next) => {
   const requestId = Date.now();
-  
-  // ★修正：toLowerCase() を追加して、大文字・小文字どちらで届いても確実にキャッチする
   const contentType = req.headers['content-type'] || '';
   const isMultipart = contentType.toLowerCase().includes('multipart/form-data');
 
-  // マルチパート（画像アップロード）の時
+  // ------------------------------------------
+  // Aパターン：マルチパート（画像アップロードなど）の場合
+  // ------------------------------------------
   if (isMultipart) {
+    // 【解説】画像データはここではパースできないため、レスポンス（右側）の監視だけ仕込んで
+    // すぐに次の処理（multer）へバトンタッチします。
+    // 左側の吹き出し（REQUEST）は、/uploadproductimages エンドポイント側で中身が確定した後に emit します。
     const emitResponseOnce = () => {
       if (res._hasEmittedLog) return;
       io.emit('new_request', {
@@ -90,10 +93,13 @@ app.use((req, res, next) => {
     };
     res.on('finish', emitResponseOnce);
 
-    return next(); // これで確実にすり抜けず、下の /uploadproductimages エンドポイントへ進みます
+    return next(); // ★ここで処理を終了して次に進む（正しい早期リターン）
   }
 
-  // 通常のJSONリクエスト時の処理（変更なし）
+  // ------------------------------------------
+  // Bパターン：通常のJSONリクエスト（/get_token や /update_product など）の場合
+  // ------------------------------------------
+  // 【解説】マルチパート以外のリクエストは、ここで生データをパースして、即座に左側のログ（REQUEST）を emit します。
   let dataBuffer = '';
   req.on('data', chunk => {
     dataBuffer += chunk;
@@ -110,13 +116,14 @@ app.use((req, res, next) => {
       req.body = req.body || {};
     }
 
+    // 通常リクエスト用の左側ログ発行（ヘッダー情報等もここで送られます）
     io.emit('new_request', {
       id: requestId,
       side: 'left',
       method: req.method,
       path: req.path,
       jaCode: req.jaCode,
-      headers: req.headers,
+      headers: req.headers, // ★ これで通常のREQUEST HEADERが復活します！
       query: req.query,
       body: req.body, 
       timestamp: new Date().toLocaleTimeString(),
@@ -149,7 +156,7 @@ app.use((req, res, next) => {
     };
 
     res.on('finish', emitResponseOnce);
-    next();
+    next(); // 通常処理を次に進める
   });
 });
 
