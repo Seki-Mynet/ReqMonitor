@@ -197,7 +197,7 @@ const authenticateToken = (req, res, next) => {
 };
 
 // ------------------------------------------
-// 商品画像アップロードエンドポイント（完全にパースされたデータを送る版）
+// 商品画像アップロードエンドポイント（画像URL構造強化版）
 // ------------------------------------------
 apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), (req, res) => {
   const fileNames = req.files ? req.files.map(file => file.originalname) : [];
@@ -206,7 +206,7 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
   const baseUrl = `${req.protocol}://${req.get('host')}`; 
   const imageUrls = req.files ? req.files.map(file => `${baseUrl}/images/${file.filename}`) : [];
 
-  // multer を通過して、完全に解析し終わったデータをここで組み立てて画面へ送る
+  // 画面に表示するオブジェクトを組み立てる
   const formattedBody = {
     info: "Multipart Form Data パース完了",
     uploaded_files_count: req.files ? req.files.length : 0,
@@ -216,10 +216,12 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
       mimetype: file.mimetype,
       size: `${(file.size / 1024).toFixed(2)} KB`
     })) : [],
+    // ★【ここを追加】body の中にも直接イメージのURL配列を含める
+    images: imageUrls, 
     text_parameters: req.body || {} 
   };
 
-  // ここで正式に左側の吹き出し用ログ（new_request）を発行
+  // Socket通知を送信
   io.emit('new_request', {
     id: Date.now(),
     side: 'left',
@@ -228,8 +230,8 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
     jaCode: req.jaCode,
     headers: req.headers,
     query: req.query,
-    body: formattedBody, // これでフロントエンドにオブジェクトとして渡る
-    images: imageUrls, 
+    body: formattedBody, 
+    images: imageUrls, // 外側にも残しておく（フロントの既存ロジック用）
     timestamp: new Date().toLocaleTimeString(),
   });
   
