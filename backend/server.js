@@ -65,13 +65,23 @@ app.use((req, res, next) => {
   const contentType = req.headers['content-type'] || '';
   const isMultipart = contentType.toLowerCase().includes('multipart/form-data');
 
-  // ------------------------------------------
+// ------------------------------------------
   // Aパターン：マルチパート（画像アップロードなど）の場合
   // ------------------------------------------
   if (isMultipart) {
-    // 【解説】画像データはここではパースできないため、レスポンス（右側）の監視だけ仕込んで
-    // すぐに次の処理（multer）へバトンタッチします。
-    // 左側の吹き出し（REQUEST）は、/uploadproductimages エンドポイント側で中身が確定した後に emit します。
+    // ★ 追加：リクエストが届いた時点で、まず左側のログ（ヘッダー付き）を一度送ってしまう
+    io.emit('new_request', {
+      id: requestId,
+      side: 'left',
+      method: req.method,
+      path: req.path,
+      jaCode: req.jaCode,
+      headers: req.headers, // ★ これでマルチパートの時もリクエストヘッダーが載る
+      query: req.query,
+      body: { info: "Multipart raw request received (Parsing body...)" }, 
+      timestamp: new Date().toLocaleTimeString(),
+    });
+
     const emitResponseOnce = () => {
       if (res._hasEmittedLog) return;
       io.emit('new_request', {
@@ -93,7 +103,7 @@ app.use((req, res, next) => {
     };
     res.on('finish', emitResponseOnce);
 
-    return next(); // ★ここで処理を終了して次に進む（正しい早期リターン）
+    return next();
   }
 
   // ------------------------------------------
