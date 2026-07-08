@@ -38,18 +38,20 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 // ==========================================
-// JA識別子(://の直後3文字)の解析ミドルウェア
+// JA識別子(最初のハイフンまでの英数字)の解析ミドルウェア
 // ==========================================
 app.use((req, res, next) => {
   const targetString = req.headers['x-original-url'] || req.headers.host || '';
-  let match = targetString.match(/:\/\/([0-9]{3})/);
+  
+  // 「://の直後」または「文字列の先頭」から、最初のハイフン(-)の前までの英数字(1文字以上)をキャプチャ
+  let match = targetString.match(/:\/\/([0-9a-zA-Z]+)-/);
   
   if (!match) {
-    match = targetString.match(/^([0-9]{3})/);
+    match = targetString.match(/^([0-9a-zA-Z]+)-/);
   }
 
   if (match) {
-    req.jaCode = match[1];
+    req.jaCode = match[1]; // ハイフンの前にある英数字全体（例: "ja001" や "001A"）が格納されます
   } else {
     req.jaCode = null;
   }
