@@ -305,6 +305,7 @@ const handleCopy = (msg) => {
                       </>
                     ) : (
                       <>
+                        <InfoSection title="Request Headers" data={msg.headers} />
                         <InfoSection title="Request Body" data={msg.body} />
                         
                         {/* ★ 修正：body.files の中の画像データを直接読み込んでプレビュー出力する */}
