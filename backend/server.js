@@ -177,13 +177,6 @@ app.use((req, res, next) => {
 // ==========================================
 const apiRouter = express.Router();
 
-apiRouter.use((req, res, next) => {
-  if (!req.jaCode) {
-    return res.status(400).json({ status: 'error', message: 'Invalid or missing JA identifier sub-domain.' });
-  }
-  next();
-});
-
 // トークン検証用ミドルウェア
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
