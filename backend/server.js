@@ -71,19 +71,6 @@ app.use((req, res, next) => {
   // Aパターン：マルチパート（画像アップロードなど）の場合
   // ------------------------------------------
   if (isMultipart) {
-    // ★ 追加：リクエストが届いた時点で、まず左側のログ（ヘッダー付き）を一度送ってしまう
-    io.emit('new_request', {
-      id: requestId,
-      side: 'left',
-      method: req.method,
-      path: req.path,
-      jaCode: req.jaCode,
-      headers: req.headers, // ★ これでマルチパートの時もリクエストヘッダーが載る
-      query: req.query,
-      body: { info: "Multipart raw request received (Parsing body...)" }, 
-      timestamp: new Date().toLocaleTimeString(),
-    });
-
     const emitResponseOnce = () => {
       if (res._hasEmittedLog) return;
       io.emit('new_request', {
@@ -243,7 +230,7 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
     id: Date.now(),
     side: 'left',
     method: req.method,
-    path: req.path,
+    path: req.baseUrl + req.path, 
     jaCode: req.jaCode,
     headers: req.headers,
     query: req.query,
