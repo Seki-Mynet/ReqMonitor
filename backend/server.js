@@ -37,6 +37,8 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage: storage });
 
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
 // ==========================================
 // JA識別子(最初のハイフンまでの英数字)の解析ミドルウェア
 // ==========================================
@@ -198,7 +200,8 @@ const authenticateToken = (req, res, next) => {
 // ------------------------------------------
 // 商品画像アップロード（画像データそのものをJSONに埋め込む版）
 // ------------------------------------------
-apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), (req, res) => {
+apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]', 500), async(req, res) => {
+  await sleep(1000);
   const fileNames = req.files ? req.files.map(file => file.originalname) : [];
   
   // 画面に表示するオブジェクトを組み立てる
@@ -242,11 +245,13 @@ apiRouter.post('/uploadproductimages', authenticateToken, upload.array('images[]
 });
 
 // 既存のエンドポイント
-apiRouter.post('/test', (req, res) => {
+apiRouter.post('/test', async(req, res) => {
+  await sleep(1000);
   res.json({ status: 'ok' });
 });
 
-apiRouter.post('/get_token', (req, res) => {
+apiRouter.post('/get_token', async(req, res) => {
+  await sleep(1000);
   const { userId, password } = req.body;
   if (!userId || !password) {
     return res.status(400).json({
@@ -273,7 +278,8 @@ apiRouter.post('/get_token', (req, res) => {
   });
 });
 
-apiRouter.post('/update_product', authenticateToken, (req, res) => {
+apiRouter.post('/update_product', authenticateToken, async(req, res) => {
+    await sleep(1000);
     const products = req.body.products;
     if (products && Array.isArray(products)) {
         const productCodes = products.map(p => p.product_code);
